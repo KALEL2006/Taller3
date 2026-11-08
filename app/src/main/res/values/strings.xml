@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Taller3</string>
+    <string name="auth_required_fields">Ingresa tu correo y tu contraseña.</string>
+    <string name="auth_sign_in_error">No se pudo iniciar sesión. Revisa tus datos y vuelve a intentarlo.</string>
 </resources>
