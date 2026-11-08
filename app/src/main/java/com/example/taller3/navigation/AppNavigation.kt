@@ -1,9 +1,13 @@
 package com.example.taller3.navigation
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,63 +67,69 @@ fun AppNavigation(authViewModel: AuthViewModel = viewModel()) {
         }
     }
 
-    NavDisplay(
-        backStack = backStack,
-        onBack = {
-            when (backStack.lastOrNull()) {
-                RegisterRoute -> leaveRegister()
-                ProfileRoute -> leaveProfile()
-                else -> Unit
-            }
-        },
-        entryDecorators = listOf(
-            rememberSaveableStateHolderNavEntryDecorator(),
-            rememberViewModelStoreNavEntryDecorator()
-        ),
-        entryProvider = entryProvider {
-            entry<LoginRoute> {
-                LoginScreen(
-                    state = state,
-                    onEmailChange = authViewModel::onEmailChange,
-                    onPasswordChange = authViewModel::onPasswordChange,
-                    onSignIn = authViewModel::signInUser,
-                    onOpenRegister = {
-                        if (backStack.lastOrNull() == LoginRoute) {
-                            authViewModel.clearForm()
-                            backStack.add(RegisterRoute)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground
+    ) {
+        NavDisplay(
+            backStack = backStack,
+            onBack = {
+                when (backStack.lastOrNull()) {
+                    RegisterRoute -> leaveRegister()
+                    ProfileRoute -> leaveProfile()
+                    else -> Unit
+                }
+            },
+            entryDecorators = listOf(
+                rememberSaveableStateHolderNavEntryDecorator(),
+                rememberViewModelStoreNavEntryDecorator()
+            ),
+            entryProvider = entryProvider {
+                entry<LoginRoute> {
+                    LoginScreen(
+                        state = state,
+                        onEmailChange = authViewModel::onEmailChange,
+                        onPasswordChange = authViewModel::onPasswordChange,
+                        onSignIn = authViewModel::signInUser,
+                        onOpenRegister = {
+                            if (backStack.lastOrNull() == LoginRoute) {
+                                authViewModel.clearForm()
+                                backStack.add(RegisterRoute)
+                            }
                         }
-                    }
-                )
-            }
+                    )
+                }
 
-            entry<RegisterRoute> {
-                RegisterScreen(
-                    state = state,
-                    onNameChange = authViewModel::onNameChange,
-                    onIdentificationChange = authViewModel::onIdentificationChange,
-                    onEmailChange = authViewModel::onEmailChange,
-                    onPasswordChange = authViewModel::onPasswordChange,
-                    onPhoneChange = authViewModel::onPhoneChange,
-                    onRegister = authViewModel::registerUser,
-                    onBack = leaveRegister
-                )
-            }
+                entry<RegisterRoute> {
+                    RegisterScreen(
+                        state = state,
+                        onNameChange = authViewModel::onNameChange,
+                        onIdentificationChange = authViewModel::onIdentificationChange,
+                        onEmailChange = authViewModel::onEmailChange,
+                        onPasswordChange = authViewModel::onPasswordChange,
+                        onPhoneChange = authViewModel::onPhoneChange,
+                        onRegister = authViewModel::registerUser,
+                        onBack = leaveRegister
+                    )
+                }
 
-            entry<MapRoute> {
-                MapScreen(
-                    onSignOut = authViewModel::signOut,
-                    onOpenProfile = {
-                        if (backStack.lastOrNull() == MapRoute) {
-                            backStack.add(ProfileRoute)
-                        }
-                    },
-                    viewModel = mapViewModel
-                )
-            }
+                entry<MapRoute> {
+                    MapScreen(
+                        onSignOut = authViewModel::signOut,
+                        onOpenProfile = {
+                            if (backStack.lastOrNull() == MapRoute) {
+                                backStack.add(ProfileRoute)
+                            }
+                        },
+                        viewModel = mapViewModel
+                    )
+                }
 
-            entry<ProfileRoute> {
-                ProfileScreen(onBack = leaveProfile)
+                entry<ProfileRoute> {
+                    ProfileScreen(onBack = leaveProfile)
+                }
             }
-        }
-    )
+        )
+    }
 }
