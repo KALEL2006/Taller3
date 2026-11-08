@@ -8,6 +8,7 @@ import com.example.taller3.R
 import com.example.taller3.data.ConnectedUsersUiState
 import com.example.taller3.data.MapUiState
 import com.example.taller3.data.model.LiveLocation
+import com.example.taller3.data.repository.ProfileRepository
 import com.example.taller3.data.repository.TrackingRepository
 import com.example.taller3.location.locationUpdates
 import com.google.firebase.Firebase
@@ -29,20 +30,32 @@ import kotlinx.coroutines.withContext
 
 class MapViewModel(application: Application) : AndroidViewModel(application) {
     private val trackingRepository = TrackingRepository()
+    private val profiles = ProfileRepository()
     private val auth = Firebase.auth
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState = _uiState.asStateFlow()
     private val _connectedUsers = MutableStateFlow(ConnectedUsersUiState())
     val connectedUsers = _connectedUsers.asStateFlow()
+    private val _ownPhotoUrl = MutableStateFlow<String?>(null)
+    val ownPhotoUrl = _ownPhotoUrl.asStateFlow()
 
     private var session: SharingSession? = null
     private var trackingJob: Job? = null
     private var disconnectJob: Job? = null
     private var connectedUsersJob: Job? = null
+    private var ownPhotoJob: Job? = null
 
     fun startWatchingUsers() {
-        if (connectedUsersJob?.isActive == true) return
         val ownUid = auth.currentUser?.uid ?: return
+
+        if (ownPhotoJob?.isActive != true) {
+            ownPhotoJob = viewModelScope.launch {
+                profiles.observePhotoUrl(ownUid)
+                    .catch { emit(null) }
+                    .collect { _ownPhotoUrl.value = it }
+            }
+        }
+        if (connectedUsersJob?.isActive == true) return
 
         _connectedUsers.value = ConnectedUsersUiState()
         connectedUsersJob = viewModelScope.launch {
@@ -91,7 +104,10 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     fun stopWatchingUsers() {
         connectedUsersJob?.cancel()
         connectedUsersJob = null
+        ownPhotoJob?.cancel()
+        ownPhotoJob = null
         _connectedUsers.value = ConnectedUsersUiState()
+        _ownPhotoUrl.value = null
     }
 
     private suspend fun watchRoute(key: RouteKey) {

@@ -35,7 +35,8 @@ class TrackingRepository {
                         name = (document.get("name") as? String).orEmpty(),
                         position = position,
                         routeId = (document.get("routeId") as? String)
-                            ?.takeIf { it.isNotBlank() && '/' !in it }
+                            ?.takeIf { it.isNotBlank() && '/' !in it },
+                        photoUrl = document.get("photoUrl") as? String
                     )
                 }
             }

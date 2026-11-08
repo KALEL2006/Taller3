@@ -11,3 +11,6 @@ data object RegisterRoute : NavKey
 
 @Serializable
 data object MapRoute : NavKey
+
+@Serializable
+data object ProfileRoute : NavKey

@@ -1,15 +1,17 @@
 package com.example.taller3.ui.screens
 
 import android.Manifest
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -22,7 +24,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -30,8 +35,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -47,14 +50,20 @@ import com.google.maps.android.compose.rememberCameraPositionState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapScreen(onSignOut: () -> Unit, viewModel: MapViewModel = viewModel()) {
+fun MapScreen(
+    onSignOut: () -> Unit,
+    onOpenProfile: () -> Unit,
+    viewModel: MapViewModel = viewModel()
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val connectedUsers by viewModel.connectedUsers.collectAsStateWithLifecycle()
+    val ownPhotoUrl by viewModel.ownPhotoUrl.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val activity = LocalActivity.current
+    var menuOpen by remember { mutableStateOf(false) }
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(4.6097, -74.0817), 12f)
     }
+    var centeredRouteStart by rememberSaveable { mutableStateOf<LatLng?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -63,12 +72,6 @@ fun MapScreen(onSignOut: () -> Unit, viewModel: MapViewModel = viewModel()) {
             viewModel.startSharing()
         } else {
             viewModel.onPermissionDenied()
-        }
-    }
-
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (activity?.isChangingConfigurations != true) {
-            viewModel.stopSharing()
         }
     }
 
@@ -82,8 +85,11 @@ fun MapScreen(onSignOut: () -> Unit, viewModel: MapViewModel = viewModel()) {
     }
     val firstPosition = routePositions.firstOrNull()
     LaunchedEffect(firstPosition) {
-        if (firstPosition != null) {
-            cameraPositionState.position = CameraPosition.fromLatLngZoom(firstPosition, 16f)
+        if (firstPosition != centeredRouteStart) {
+            centeredRouteStart = firstPosition
+            if (firstPosition != null) {
+                cameraPositionState.position = CameraPosition.fromLatLngZoom(firstPosition, 16f)
+            }
         }
     }
 
@@ -98,11 +104,33 @@ fun MapScreen(onSignOut: () -> Unit, viewModel: MapViewModel = viewModel()) {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
-                    TextButton(
-                        onClick = { viewModel.signOut(onSignOut) },
-                        enabled = !state.isDisconnecting
-                    ) {
-                        Text(stringResource(R.string.sign_out))
+                    Box {
+                        TextButton(
+                            onClick = { menuOpen = true },
+                            enabled = !state.isDisconnecting
+                        ) {
+                            Text(stringResource(R.string.map_menu))
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.profile_edit)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onOpenProfile()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sign_out)) },
+                                onClick = {
+                                    menuOpen = false
+                                    viewModel.signOut(onSignOut)
+                                },
+                                enabled = !state.isDisconnecting
+                            )
+                        }
                     }
                 }
             )
@@ -147,7 +175,8 @@ fun MapScreen(onSignOut: () -> Unit, viewModel: MapViewModel = viewModel()) {
                         state.isDisconnecting -> R.string.map_stopping
                         state.isSharing && routePositions.isEmpty() -> R.string.map_waiting_for_fix
                         state.isSharing -> R.string.map_location_shared
-                        else -> null
+                        state.needsDisconnectRetry -> null
+                        else -> R.string.map_disconnected
                     }
                     status?.let { Text(stringResource(it)) }
 
@@ -183,7 +212,8 @@ fun MapScreen(onSignOut: () -> Unit, viewModel: MapViewModel = viewModel()) {
                         ProfileMapMarker(
                             position = LatLng(user.position.latitude, user.position.longitude),
                             title = user.name.ifBlank { otherMarkerTitle },
-                            color = otherRouteColor
+                            color = otherRouteColor,
+                            photoUrl = user.photoUrl
                         )
                     }
                 }
@@ -191,7 +221,7 @@ fun MapScreen(onSignOut: () -> Unit, viewModel: MapViewModel = viewModel()) {
                     Polyline(points = routePositions, color = routeColor, width = 10f)
                 }
                 routePositions.lastOrNull()?.let { position ->
-                    ProfileMapMarker(position = position, title = markerTitle)
+                    ProfileMapMarker(position = position, title = markerTitle, photoUrl = ownPhotoUrl)
                 }
             }
         }

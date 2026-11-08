@@ -5,5 +5,6 @@ data class LiveLocation(
     val name: String,
     val position: RoutePoint,
     val routeId: String?,
-    val route: List<RoutePoint> = emptyList()
+    val route: List<RoutePoint> = emptyList(),
+    val photoUrl: String? = null
 )
