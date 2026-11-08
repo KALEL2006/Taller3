@@ -1,5 +1,25 @@
 <resources>
     <string name="app_name">Taller3</string>
+    <string name="login_title">Iniciar sesión</string>
+    <string name="login_email">Correo electrónico</string>
+    <string name="login_password">Contraseña</string>
+    <string name="login_loading">Ingresando…</string>
     <string name="auth_required_fields">Ingresa tu correo y tu contraseña.</string>
     <string name="auth_sign_in_error">No se pudo iniciar sesión. Revisa tus datos y vuelve a intentarlo.</string>
+    <string name="session_started">Sesión iniciada</string>
+    <string name="sign_out">Cerrar sesión</string>
+    <string name="register_title">Crear cuenta</string>
+    <string name="register_complete_profile">Completa tu perfil</string>
+    <string name="register_name">Nombre</string>
+    <string name="register_identification">Número de identificación</string>
+    <string name="register_phone">Teléfono</string>
+    <string name="register_save_profile">Guardar perfil</string>
+    <string name="register_saving">Guardando…</string>
+    <string name="register_back">Volver al inicio de sesión</string>
+    <string name="register_required_fields">Completa todos los campos.</string>
+    <string name="register_short_password">La contraseña debe tener al menos 6 caracteres.</string>
+    <string name="register_email_in_use">Este correo ya tiene una cuenta. Inicia sesión para continuar.</string>
+    <string name="register_error">No se pudo crear la cuenta. Vuelve a intentarlo.</string>
+    <string name="register_profile_error">No se pudo guardar el perfil. Vuelve a intentarlo.</string>
+    <string name="profile_check_error">No se pudo consultar tu perfil. Vuelve a iniciar sesión.</string>
 </resources>

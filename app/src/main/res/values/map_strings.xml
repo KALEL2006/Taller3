@@ -1,0 +1,14 @@
+<resources>
+    <string name="map_share_location">Compartir mi ubicación</string>
+    <string name="map_my_location">Mi ubicación</string>
+    <string name="map_waiting_for_fix">Buscando tu ubicación…</string>
+    <string name="map_location_shared">Ubicación compartida</string>
+    <string name="map_stopping">Desconectando y limpiando el recorrido…</string>
+    <string name="map_permission_denied">Permite el acceso a la ubicación para compartirla.</string>
+    <string name="map_error_sharing">No se pudo compartir la ubicación. Revisa la ubicación del dispositivo y la conexión.</string>
+    <string name="map_error_disconnect">No se pudo completar la desconexión en Firestore. Reintenta cuando tengas conexión.</string>
+    <string name="map_retry_disconnect">Reintentar desconexión</string>
+    <string name="map_other_user">Usuario conectado</string>
+    <string name="map_error_other_users">No se pudieron cargar los usuarios conectados.</string>
+    <string name="map_retry_other_users">Reintentar cargar usuarios</string>
+</resources>
