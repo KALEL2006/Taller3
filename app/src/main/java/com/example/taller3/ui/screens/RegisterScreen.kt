@@ -1,29 +1,22 @@
 package com.example.taller3.ui.screens
 
-import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.taller3.R
 import com.example.taller3.data.AuthUiState
+import com.example.taller3.ui.components.AppTextField
+import com.example.taller3.ui.components.AuthScaffold
+import com.example.taller3.ui.components.LoadingButton
+import com.example.taller3.ui.components.StatusMessage
 
 @Composable
 fun RegisterScreen(
@@ -43,98 +36,79 @@ fun RegisterScreen(
         R.string.register_title
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    AuthScaffold(
+        title = title,
+        subtitle = R.string.register_subtitle,
+        footer = {
+            TextButton(onClick = onBack, enabled = enabled) {
+                val (label, icon) = if (state.needsProfile) {
+                    R.string.sign_out to R.drawable.ic_logout
+                } else {
+                    R.string.register_back to R.drawable.ic_arrow_back
+                }
+                Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(label))
+            }
+        }
     ) {
-        Text(
-            text = stringResource(title),
-            style = MaterialTheme.typography.headlineMedium
+        AppTextField(
+            value = state.name,
+            onValueChange = onNameChange,
+            label = R.string.register_name,
+            icon = R.drawable.ic_person,
+            enabled = enabled
         )
-
-        RegisterField(R.string.register_name, state.name, onNameChange, enabled)
-        RegisterField(
-            R.string.register_identification,
-            state.identification,
-            onIdentificationChange,
-            enabled,
+        AppTextField(
+            value = state.identification,
+            onValueChange = onIdentificationChange,
+            label = R.string.register_identification,
+            icon = R.drawable.ic_badge,
+            enabled = enabled,
             keyboardType = KeyboardType.Number
         )
-        RegisterField(
-            R.string.login_email,
-            state.email,
-            onEmailChange,
-            enabled,
+        AppTextField(
+            value = state.email,
+            onValueChange = onEmailChange,
+            label = R.string.login_email,
+            icon = R.drawable.ic_email,
+            enabled = enabled,
             keyboardType = KeyboardType.Email,
             readOnly = state.needsProfile
         )
 
         if (!state.needsProfile) {
-            RegisterField(
-                R.string.login_password,
-                state.password,
-                onPasswordChange,
-                enabled,
-                keyboardType = KeyboardType.Password,
-                visualTransformation = PasswordVisualTransformation()
+            AppTextField(
+                value = state.password,
+                onValueChange = onPasswordChange,
+                label = R.string.login_password,
+                icon = R.drawable.ic_lock,
+                enabled = enabled,
+                keyboardType = KeyboardType.Password
             )
         }
 
-        RegisterField(
-            R.string.register_phone,
-            state.phone,
-            onPhoneChange,
-            enabled,
+        AppTextField(
+            value = state.phone,
+            onValueChange = onPhoneChange,
+            label = R.string.register_phone,
+            icon = R.drawable.ic_phone,
+            enabled = enabled,
             keyboardType = KeyboardType.Phone
         )
 
-        state.errorMessageRes?.let { message ->
-            Text(stringResource(message), color = MaterialTheme.colorScheme.error)
-        }
+        state.errorMessageRes?.let { message -> StatusMessage(message) }
 
-        Button(
-            onClick = onRegister,
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            val label = when {
+        LoadingButton(
+            text = when {
                 state.isLoading -> R.string.register_saving
                 state.needsProfile -> R.string.register_save_profile
                 else -> R.string.register_title
-            }
-            Text(stringResource(label))
-        }
-
-        TextButton(onClick = onBack, enabled = enabled) {
-            val label = if (state.needsProfile) R.string.sign_out else R.string.register_back
-            Text(stringResource(label))
-        }
+            },
+            onClick = onRegister,
+            enabled = enabled,
+            loading = state.isLoading,
+            icon = R.drawable.ic_person_add
+        )
     }
-}
-
-@Composable
-private fun RegisterField(
-    @StringRes label: Int,
-    value: String,
-    onValueChange: (String) -> Unit,
-    enabled: Boolean,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    readOnly: Boolean = false,
-    visualTransformation: VisualTransformation = VisualTransformation.None
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(stringResource(label)) },
-        enabled = enabled,
-        readOnly = readOnly,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        visualTransformation = visualTransformation
-    )
 }

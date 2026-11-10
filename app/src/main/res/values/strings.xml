@@ -65,4 +65,19 @@
     <string name="profile_weak_password">La contraseña nueva no cumple los requisitos de seguridad.</string>
     <string name="profile_password_changed">Contraseña actualizada.</string>
     <string name="profile_password_error">No se pudo cambiar la contraseña. Vuelve a intentarlo.</string>
+
+    <!-- Textos de diseño -->
+    <string name="app_tagline">Comparte tu ruta en tiempo real</string>
+    <string name="login_subtitle">Ingresa para ver quién está conectado cerca de ti.</string>
+    <string name="login_no_account">¿Aún no tienes cuenta?</string>
+    <string name="register_subtitle">Tu ubicación solo se comparte cuando tú lo decides.</string>
+    <string name="map_status_hint_off">Activa el switch para aparecer en el mapa.</string>
+    <string name="profile_personal_info">Datos personales</string>
+    <string name="profile_security">Seguridad</string>
+    <string name="profile_photo_hint">Toca la cámara para cambiar tu foto.</string>
+    <plurals name="map_users_online">
+        <item quantity="one">%d usuario conectado</item>
+        <item quantity="many">%d usuarios conectados</item>
+        <item quantity="other">%d usuarios conectados</item>
+    </plurals>
 </resources>
