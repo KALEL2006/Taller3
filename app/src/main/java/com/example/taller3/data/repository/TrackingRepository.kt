@@ -8,6 +8,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
@@ -16,15 +17,21 @@ import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.runningFold
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
@@ -51,8 +58,10 @@ class TrackingRepository(context: Context) {
         }
     }
 
-    fun observeConnectedLocations(): Flow<List<LiveLocation>> {
-        return locations.whereEqualTo("connected", true)
+    fun observeConnectedLocations(): Flow<List<LiveLocation>> = channelFlow {
+        val cleanupJobs = mutableMapOf<String, Job>()
+        val cleanupLimit = Semaphore(4)
+        val observations = locations.whereEqualTo("connected", true)
             .limit(100L)
             .confirmedSnapshots()
             .runningFold(emptyList<ObservedLocation>()) { previous, snapshot ->
@@ -62,17 +71,11 @@ class TrackingRepository(context: Context) {
                     val position = document.toRoutePoint() ?: return@mapNotNull null
                     val updatedAt = document.getTimestamp("updatedAt") ?: return@mapNotNull null
                     val old = previousByUid[document.id]
-                    val remaining = if (old == null) {
-                        val age = (System.currentTimeMillis() - updatedAt.toDate().time)
-                            .coerceIn(0L, PRESENCE_TIMEOUT_MS)
-                        PRESENCE_TIMEOUT_MS - age
-                    } else {
-                        PRESENCE_TIMEOUT_MS
-                    }
                     val expiresAt = if (old != null && old.updatedAt == updatedAt) {
                         old.expiresAt
                     } else {
-                        now + remaining
+                        // El plazo usa tiempo transcurrido, independiente del reloj del teléfono.
+                        now + PRESENCE_TIMEOUT_MS
                     }
                     val location = LiveLocation(
                         uid = document.id,
@@ -85,16 +88,60 @@ class TrackingRepository(context: Context) {
                     ObservedLocation(location, updatedAt, expiresAt)
                 }
             }
-            .combine(flow {
-                while (true) {
-                    emit(Unit)
-                    delay(PRESENCE_CHECK_INTERVAL_MS)
-                }
-            }) { observations, _ ->
-                val now = SystemClock.elapsedRealtime()
-                observations.filter { it.expiresAt > now }.map { it.location }
+
+        val checks = flow {
+            while (true) {
+                emit(Unit)
+                delay(PRESENCE_CHECK_INTERVAL_MS)
             }
-            .distinctUntilChanged()
+        }
+
+        try {
+            observations.combine(checks) { current, _ -> current }
+                .collect { current ->
+                    val currentUids = current.map { it.location.uid }.toSet()
+                    (cleanupJobs.keys - currentUids).forEach { uid ->
+                        cleanupJobs.remove(uid)?.cancel()
+                    }
+
+                    val now = SystemClock.elapsedRealtime()
+                    current.filter { it.expiresAt <= now }.forEach { expired ->
+                        val uid = expired.location.uid
+                        if (cleanupJobs[uid]?.isActive != true) {
+                            cleanupJobs[uid] = launch {
+                                cleanupLimit.withPermit {
+                                    expirePresence(uid, expired.updatedAt)
+                                }
+                            }
+                        }
+                    }
+
+                    // La eliminación del mapa sigue al cambio confirmado en Firestore.
+                    send(current.map { it.location })
+                }
+        } finally {
+            cleanupJobs.values.forEach { it.cancel() }
+        }
+    }.distinctUntilChanged()
+
+    private suspend fun expirePresence(uid: String, expectedUpdatedAt: Timestamp) {
+        val locationRef = locations.document(uid)
+        try {
+            firestore.runTransaction { transaction ->
+                val current = transaction.get(locationRef)
+                if (current.getBoolean("connected") == true &&
+                    current.getTimestamp("updatedAt") == expectedUpdatedAt
+                ) {
+                    transaction.update(locationRef, disconnectedFields())
+                }
+                Unit
+            }.await()
+        } catch (error: FirebaseFirestoreException) {
+            // Otro observador puede haber cerrado la sesión antes de nuestra lectura.
+            if (error.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                throw error
+            }
+        }
     }
 
     fun observeRoute(uid: String, routeId: String): Flow<List<RoutePoint>> {
@@ -162,16 +209,7 @@ class TrackingRepository(context: Context) {
         val locationRef = locations.document(uid)
         firestore.runTransaction { transaction ->
             if (transaction.get(locationRef).getString("routeId") == routeId) {
-                transaction.update(
-                    locationRef,
-                    mapOf(
-                        "connected" to false,
-                        "latitude" to FieldValue.delete(),
-                        "longitude" to FieldValue.delete(),
-                        "routeId" to FieldValue.delete(),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                )
+                transaction.update(locationRef, disconnectedFields())
             }
             Unit
         }.await()
@@ -186,6 +224,14 @@ class TrackingRepository(context: Context) {
             batch.commit().await()
         }
     }
+
+    private fun disconnectedFields() = mapOf(
+        "connected" to false,
+        "latitude" to FieldValue.delete(),
+        "longitude" to FieldValue.delete(),
+        "routeId" to FieldValue.delete(),
+        "updatedAt" to FieldValue.serverTimestamp()
+    )
 
     private fun routePoints(uid: String, routeId: String) =
         locations.document(uid).collection("routes").document(routeId).collection("points")

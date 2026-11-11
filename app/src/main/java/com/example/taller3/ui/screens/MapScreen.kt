@@ -142,7 +142,7 @@ fun MapScreen(
         )
     }
     val mapUiSettings = remember {
-        MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false)
+        MapUiSettings(zoomControlsEnabled = true, mapToolbarEnabled = false)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
