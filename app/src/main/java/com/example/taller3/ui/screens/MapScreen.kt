@@ -402,7 +402,7 @@ fun MapScreen(
                 )
                 val count = connectedUsers.users.size
                 Text(
-                    text = pluralStringResource(R.plurals.map_users_online, count, count),
+                    text = pluralStringResource(R.plurals.map_other_users_online, count, count),
                     style = MaterialTheme.typography.labelLarge
                 )
             }

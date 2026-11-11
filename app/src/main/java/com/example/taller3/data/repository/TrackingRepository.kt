@@ -1,8 +1,11 @@
 package com.example.taller3.data.repository
 
+import android.content.Context
+import android.os.SystemClock
 import com.example.taller3.data.model.LiveLocation
 import com.example.taller3.data.model.RoutePoint
 import com.google.firebase.Firebase
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.MetadataChanges
@@ -12,25 +15,66 @@ import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
-class TrackingRepository {
+class TrackingRepository(context: Context) {
     private val firestore = Firebase.firestore
     private val locations = firestore.collection("liveLocations")
+    private val pendingRoutes = context.applicationContext.getSharedPreferences(
+        "pending_tracking_routes",
+        Context.MODE_PRIVATE
+    )
+
+    fun pendingRoute(uid: String): String? {
+        return pendingRoutes.getString(uid, null)
+            ?.takeIf { it.isNotBlank() && '/' !in it }
+    }
+
+    suspend fun rememberRoute(uid: String, routeId: String) = withContext(Dispatchers.IO) {
+        check(pendingRoutes.edit().putString(uid, routeId).commit())
+    }
+
+    suspend fun forgetRoute(uid: String, routeId: String) = withContext(Dispatchers.IO) {
+        if (pendingRoutes.getString(uid, null) == routeId) {
+            check(pendingRoutes.edit().remove(uid).commit())
+        }
+    }
 
     fun observeConnectedLocations(): Flow<List<LiveLocation>> {
         return locations.whereEqualTo("connected", true)
             .limit(100L)
             .confirmedSnapshots()
-            .map { snapshot ->
+            .runningFold(emptyList<ObservedLocation>()) { previous, snapshot ->
+                val previousByUid = previous.associateBy { it.location.uid }
+                val now = SystemClock.elapsedRealtime()
                 snapshot?.documents.orEmpty().mapNotNull { document ->
                     val position = document.toRoutePoint() ?: return@mapNotNull null
-                    LiveLocation(
+                    val updatedAt = document.getTimestamp("updatedAt") ?: return@mapNotNull null
+                    val old = previousByUid[document.id]
+                    val remaining = if (old == null) {
+                        val age = (System.currentTimeMillis() - updatedAt.toDate().time)
+                            .coerceIn(0L, PRESENCE_TIMEOUT_MS)
+                        PRESENCE_TIMEOUT_MS - age
+                    } else {
+                        PRESENCE_TIMEOUT_MS
+                    }
+                    val expiresAt = if (old != null && old.updatedAt == updatedAt) {
+                        old.expiresAt
+                    } else {
+                        now + remaining
+                    }
+                    val location = LiveLocation(
                         uid = document.id,
                         name = (document.get("name") as? String).orEmpty(),
                         position = position,
@@ -38,7 +82,17 @@ class TrackingRepository {
                             ?.takeIf { it.isNotBlank() && '/' !in it },
                         photoUrl = document.get("photoUrl") as? String
                     )
+                    ObservedLocation(location, updatedAt, expiresAt)
                 }
+            }
+            .combine(flow {
+                while (true) {
+                    emit(Unit)
+                    delay(PRESENCE_CHECK_INTERVAL_MS)
+                }
+            }) { observations, _ ->
+                val now = SystemClock.elapsedRealtime()
+                observations.filter { it.expiresAt > now }.map { it.location }
             }
             .distinctUntilChanged()
     }
@@ -86,6 +140,20 @@ class TrackingRepository {
                     "recordedAt" to FieldValue.serverTimestamp()
                 )
             )
+            true
+        }.await()
+    }
+
+    suspend fun refreshPresence(uid: String, routeId: String): Boolean {
+        val locationRef = locations.document(uid)
+        return firestore.runTransaction { transaction ->
+            val current = transaction.get(locationRef)
+            if (current.getString("routeId") != routeId ||
+                current.getBoolean("connected") != true
+            ) {
+                return@runTransaction false
+            }
+            transaction.update(locationRef, "updatedAt", FieldValue.serverTimestamp())
             true
         }.await()
     }
@@ -139,4 +207,16 @@ class TrackingRepository {
         }
         awaitClose { listener.remove() }
     }.conflate()
+
+    private data class ObservedLocation(
+        val location: LiveLocation,
+        val updatedAt: Timestamp,
+        val expiresAt: Long
+    )
+
+    companion object {
+        const val PRESENCE_REFRESH_INTERVAL_MS = 15_000L
+        private const val PRESENCE_TIMEOUT_MS = 60_000L
+        private const val PRESENCE_CHECK_INTERVAL_MS = 5_000L
+    }
 }

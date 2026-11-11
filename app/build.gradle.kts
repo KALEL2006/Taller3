@@ -72,7 +72,6 @@ dependencies {
 
     implementation(libs.maps.compose)
     implementation(libs.play.services.location)
-    implementation(libs.accompanist.permissions)
     implementation(libs.kotlinx.coroutines.play.services)
 
     implementation(libs.coil.compose)
@@ -80,8 +79,6 @@ dependencies {
 
 
 
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -89,11 +86,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.credentials)
-    implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.firebase.auth)
-    implementation(libs.googleid)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

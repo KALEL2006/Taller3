@@ -19,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,10 +27,11 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 class MapViewModel(application: Application) : AndroidViewModel(application) {
-    private val trackingRepository = TrackingRepository()
+    private val trackingRepository = TrackingRepository(application)
     private val profiles = ProfileRepository()
     private val auth = Firebase.auth
     private val _uiState = MutableStateFlow(MapUiState())
@@ -41,12 +43,17 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
     private var session: SharingSession? = null
     private var trackingJob: Job? = null
+    private var presenceJob: Job? = null
     private var disconnectJob: Job? = null
     private var connectedUsersJob: Job? = null
     private var ownPhotoJob: Job? = null
 
     fun startWatchingUsers() {
         val ownUid = auth.currentUser?.uid ?: return
+
+        if (session == null && trackingRepository.pendingRoute(ownUid) != null) {
+            disconnect()
+        }
 
         if (ownPhotoJob?.isActive != true) {
             ownPhotoJob = viewModelScope.launch {
@@ -129,6 +136,10 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     fun startSharing() {
         if (session != null || disconnectJob?.isActive == true) return
         val uid = auth.currentUser?.uid ?: return
+        if (trackingRepository.pendingRoute(uid) != null) {
+            disconnect()
+            return
+        }
         val current = SharingSession(uid, UUID.randomUUID().toString())
 
         session = current
@@ -136,6 +147,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         trackingJob = viewModelScope.launch {
             var isFirstPoint = true
             try {
+                trackingRepository.rememberRoute(current.uid, current.routeId)
                 locationUpdates(getApplication<Application>()).collect { point ->
                     current.mayHavePublished = true
                     val published = withContext(NonCancellable) {
@@ -149,8 +161,31 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                     currentCoroutineContext().ensureActive()
                     check(published) { "The active route changed" }
 
+                    if (isFirstPoint) {
+                        startPresenceUpdates(current)
+                    }
                     isFirstPoint = false
                     _uiState.update { it.copy(route = it.route + point) }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                disconnect(messageRes = R.string.map_error_sharing)
+            }
+        }
+    }
+
+    private fun startPresenceUpdates(current: SharingSession) {
+        presenceJob = viewModelScope.launch {
+            try {
+                // Confirma que el rastreo sigue activo aunque el usuario esté quieto.
+                while (isActive) {
+                    delay(TrackingRepository.PRESENCE_REFRESH_INTERVAL_MS)
+                    val stillConnected = withContext(NonCancellable) {
+                        trackingRepository.refreshPresence(current.uid, current.routeId)
+                    }
+                    currentCoroutineContext().ensureActive()
+                    check(stillConnected) { "The active route changed" }
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -181,7 +216,11 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         if (disconnectJob?.isActive == true) return
 
-        val current = session
+        val uid = auth.currentUser?.uid
+        val pendingRoute = uid?.let { trackingRepository.pendingRoute(it) }
+        val current = session ?: pendingRoute?.let {
+            SharingSession(checkNotNull(uid), it, mayHavePublished = true)
+        }
         if (current == null) {
             if (onDisconnected != null) {
                 _uiState.value = MapUiState()
@@ -190,17 +229,22 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        session = current
         val activeJob = trackingJob
+        val activePresenceJob = presenceJob
         _uiState.value = MapUiState(isDisconnecting = true)
         disconnectJob = viewModelScope.launch {
             withContext(NonCancellable) {
                 activeJob?.cancelAndJoin()
                 trackingJob = null
+                activePresenceJob?.cancelAndJoin()
+                presenceJob = null
 
                 try {
                     if (current.mayHavePublished) {
                         trackingRepository.disconnect(current.uid, current.routeId)
                     }
+                    trackingRepository.forgetRoute(current.uid, current.routeId)
                 } catch (_: Exception) {
                     _uiState.value = MapUiState(
                         needsDisconnectRetry = true,
